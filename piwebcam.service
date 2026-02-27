@@ -1,0 +1,22 @@
+[Unit]
+Description=Pi Zero Cam — USB Webcam Service
+Documentation=https://github.com/Delulu-Delilah/pi-zero-cam
+After=network.target systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/piwebcam
+ExecStopPost=/bin/sleep 1
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/sys/kernel/config /sys/class/udc /dev
+
+[Install]
+WantedBy=multi-user.target
