@@ -53,44 +53,21 @@ main() {
     fi
     log "Using camera: $cam_dev"
 
+    log "Configuring MediaMTX for native Raspberry Pi Camera..."
+    
+    cat <<EOF > /tmp/mediamtx.yml
+paths:
+  cam:
+    source: rpiCamera
+    rpiCameraWidth: 1280
+    rpiCameraHeight: 720
+EOF
+
     log "Starting MediaMTX RTSP/WebRTC Server..."
-    /usr/local/bin/mediamtx &
-    sleep 2
-
-    # Check for libcamera or rpicam (renamed in modern Pi OS)
-    local cam_app=""
-    if command -v rpicam-vid &>/dev/null; then
-        cam_app="rpicam-vid"
-    elif command -v libcamera-vid &>/dev/null; then
-        cam_app="libcamera-vid"
-    fi
-
-    if [[ -n "$cam_app" ]]; then
-        log "Streaming via $cam_app..."
-        
-        # We pipe output (H264 bitstream) to ffmpeg to package it as RTSP
-        # RTSP stream will be available at rtsp://<ip>:8554/cam
-        # WebRTC stream will be available at http://<ip>:8889/cam
-        "$cam_app" -t 0 --inline --framerate 30 \
-            --codec h264 --profile high --level 4.2 \
-            -o - | ffmpeg -hide_banner -loglevel error \
-            -f h264 -i - -c:v copy \
-            -rtsp_transport tcp -f rtsp rtsp://localhost:8554/cam &
-            
-    elif command -v ffmpeg &>/dev/null; then
-        log "Streaming via ffmpeg (V4L2)..."
-        ffmpeg -hide_banner -loglevel error \
-            -f v4l2 -framerate 30 -video_size 1280x720 -i "$cam_dev" \
-            -c:v libx264 -preset ultrafast -tune zerolatency \
-            -rtsp_transport tcp -f rtsp rtsp://localhost:8554/cam &
-    else
-        die "Neither libcamera-vid nor ffmpeg is installed."
-    fi
-
     log "Streaming active! Watch at http://<pi-ip>:8889/cam"
     
-    # Keep the script running to keep background jobs alive
-    wait
+    # Run MediaMTX in the foreground with our config
+    exec /usr/local/bin/mediamtx /tmp/mediamtx.yml
 }
 
 main "$@"
