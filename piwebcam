@@ -37,11 +37,11 @@ find_camera_device() {
             if echo "$caps" | grep -qi "unicam\|bcm2835\|mmal"; then
                 # This is the Pi CSI camera — prefer it
                 best_dev="$dev"
-                log "Found CSI camera on $dev"
+                log "Found CSI camera on $dev" >&2
                 break
             elif [[ -z "$best_dev" ]]; then
                 best_dev="$dev"
-                log "Found capture device on $dev"
+                log "Found capture device on $dev" >&2
             fi
         fi
     done
@@ -97,6 +97,23 @@ trap cleanup EXIT SIGTERM SIGINT
 # ── Configure USB gadget via configfs ───────────────────────────────────────
 setup_gadget() {
     log "Configuring USB gadget..."
+
+    # Clean up any stale gadget config from a previous crash/restart
+    if [[ -d "$GADGET_DIR" ]]; then
+        log "Cleaning up stale gadget configuration..."
+        echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
+        rm -f "$GADGET_DIR/configs/c.1/uvc.usb0" 2>/dev/null || true
+        rmdir "$GADGET_DIR/configs/c.1/strings/0x409" 2>/dev/null || true
+        rmdir "$GADGET_DIR/configs/c.1" 2>/dev/null || true
+        rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/header/h" 2>/dev/null || true
+        rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs" 2>/dev/null || true
+        rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs" 2>/dev/null || true
+        rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/fs" 2>/dev/null || true
+        rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/ss" 2>/dev/null || true
+        rmdir "$GADGET_DIR/functions/uvc.usb0" 2>/dev/null || true
+        rmdir "$GADGET_DIR/strings/0x409" 2>/dev/null || true
+        rmdir "$GADGET_DIR" 2>/dev/null || true
+    fi
 
     # Mount configfs if not already mounted
     if ! mountpoint -q /sys/kernel/config; then
