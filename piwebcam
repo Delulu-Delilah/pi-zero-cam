@@ -70,26 +70,57 @@ detect_resolution() {
 }
 
 # ── Cleanup handler ─────────────────────────────────────────────────────────
+# ── Tear down gadget (used by cleanup trap and setup_gadget) ────────────────
+teardown_gadget() {
+    if [[ ! -d "$GADGET_DIR" ]]; then
+        return 0
+    fi
+
+    # 1. Unbind from UDC
+    echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
+
+    # 2. Remove function symlink from config
+    rm -f "$GADGET_DIR/configs/c.1/uvc.usb0" 2>/dev/null || true
+
+    # 3. Remove config strings and config
+    rmdir "$GADGET_DIR/configs/c.1/strings/0x409" 2>/dev/null || true
+    rmdir "$GADGET_DIR/configs/c.1" 2>/dev/null || true
+
+    # 4. Remove streaming symlinks inside header/h
+    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/header/h/m" 2>/dev/null || true
+    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/header/h/u" 2>/dev/null || true
+
+    # 5. Remove streaming class symlinks
+    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs/h" 2>/dev/null || true
+    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs/h" 2>/dev/null || true
+
+    # 6. Remove streaming directories (deepest first)
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m/2" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m/1" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/uncompressed/u/1" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/uncompressed/u" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/header/h" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs" 2>/dev/null || true
+
+    # 7. Remove control symlinks and directories
+    rm -f "$GADGET_DIR/functions/uvc.usb0/control/class/fs/h" 2>/dev/null || true
+    rm -f "$GADGET_DIR/functions/uvc.usb0/control/class/ss/h" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/control/header/h" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/fs" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/ss" 2>/dev/null || true
+
+    # 8. Remove function, strings, gadget
+    rmdir "$GADGET_DIR/functions/uvc.usb0" 2>/dev/null || true
+    rmdir "$GADGET_DIR/strings/0x409" 2>/dev/null || true
+    rmdir "$GADGET_DIR" 2>/dev/null || true
+}
+
 cleanup() {
     log "Shutting down..."
-
-    # Remove gadget configuration
-    if [[ -d "$GADGET_DIR" ]]; then
-        # Disable the gadget
-        echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
-
-        # Unlink function from config
-        rm -f "$GADGET_DIR/configs/c.1/uvc.usb0" 2>/dev/null || true
-
-        # Remove strings
-        rmdir "$GADGET_DIR/configs/c.1/strings/0x409" 2>/dev/null || true
-        rmdir "$GADGET_DIR/configs/c.1" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0" 2>/dev/null || true
-        rmdir "$GADGET_DIR/strings/0x409" 2>/dev/null || true
-        rmdir "$GADGET_DIR" 2>/dev/null || true
-
-        log "Gadget cleaned up"
-    fi
+    teardown_gadget
+    log "Gadget cleaned up"
 }
 
 trap cleanup EXIT SIGTERM SIGINT
@@ -99,21 +130,7 @@ setup_gadget() {
     log "Configuring USB gadget..."
 
     # Clean up any stale gadget config from a previous crash/restart
-    if [[ -d "$GADGET_DIR" ]]; then
-        log "Cleaning up stale gadget configuration..."
-        echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
-        rm -f "$GADGET_DIR/configs/c.1/uvc.usb0" 2>/dev/null || true
-        rmdir "$GADGET_DIR/configs/c.1/strings/0x409" 2>/dev/null || true
-        rmdir "$GADGET_DIR/configs/c.1" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/header/h" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/fs" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/ss" 2>/dev/null || true
-        rmdir "$GADGET_DIR/functions/uvc.usb0" 2>/dev/null || true
-        rmdir "$GADGET_DIR/strings/0x409" 2>/dev/null || true
-        rmdir "$GADGET_DIR" 2>/dev/null || true
-    fi
+    teardown_gadget
 
     # Mount configfs if not already mounted
     if ! mountpoint -q /sys/kernel/config; then

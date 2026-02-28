@@ -13,10 +13,6 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-# Hardening
-ProtectHome=true
-ProtectSystem=strict
-ReadWritePaths=/sys/kernel/config /sys/class/udc /dev
 
 [Install]
 WantedBy=multi-user.target
