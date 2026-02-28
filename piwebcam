@@ -93,6 +93,7 @@ teardown_gadget() {
     # 5. Remove streaming class symlinks
     rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs/h" 2>/dev/null || true
     rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs/h" 2>/dev/null || true
+    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/ss/h" 2>/dev/null || true
 
     # 6. Remove streaming directories (deepest first)
     rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m/2" 2>/dev/null || true
@@ -103,6 +104,7 @@ teardown_gadget() {
     rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/header/h" 2>/dev/null || true
     rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs" 2>/dev/null || true
     rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs" 2>/dev/null || true
+    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/ss" 2>/dev/null || true
 
     # 7. Remove control symlinks and directories
     rm -f "$GADGET_DIR/functions/uvc.usb0/control/class/fs/h" 2>/dev/null || true
@@ -190,6 +192,7 @@ setup_gadget() {
     ln -sf "$streaming_dir/uncompressed/u" "$streaming_dir/header/h/u" 2>/dev/null || true
     ln -sf "$streaming_dir/header/h"       "$streaming_dir/class/fs/h" 2>/dev/null || true
     ln -sf "$streaming_dir/header/h"       "$streaming_dir/class/hs/h" 2>/dev/null || true
+    ln -sf "$streaming_dir/header/h"       "$streaming_dir/class/ss/h" 2>/dev/null || true
 
     # Control header
     local control_dir="$GADGET_DIR/functions/uvc.usb0/control"
