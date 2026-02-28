@@ -74,14 +74,15 @@ main() {
         "$cam_app" -t 0 --inline --framerate 30 \
             --codec h264 --profile high --level 4.2 \
             -o - | ffmpeg -hide_banner -loglevel error \
-            -i - -c:v copy -f rtsp rtsp://localhost:8554/cam &
+            -f h264 -i - -c:v copy \
+            -rtsp_transport tcp -f rtsp rtsp://localhost:8554/cam &
             
     elif command -v ffmpeg &>/dev/null; then
         log "Streaming via ffmpeg (V4L2)..."
         ffmpeg -hide_banner -loglevel error \
             -f v4l2 -framerate 30 -video_size 1280x720 -i "$cam_dev" \
             -c:v libx264 -preset ultrafast -tune zerolatency \
-            -f rtsp rtsp://localhost:8554/cam &
+            -rtsp_transport tcp -f rtsp rtsp://localhost:8554/cam &
     else
         die "Neither libcamera-vid nor ffmpeg is installed."
     fi
