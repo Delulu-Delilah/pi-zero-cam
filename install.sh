@@ -225,17 +225,15 @@ install_deps() {
 
     local pkgs=(
         git
-        build-essential
-        cmake
-        pkg-config
         v4l-utils
         libjpeg-dev
         libudev-dev
+        ffmpeg
     )
 
-    # Add libcamera tools if available in repos
-    if apt-cache show libcamera-tools &>/dev/null 2>&1; then
-        pkgs+=(libcamera-tools)
+    # Add libcamera apps if available in repos (for modern Pi OS)
+    if apt-cache show libcamera-apps &>/dev/null 2>&1; then
+        pkgs+=(libcamera-apps)
     fi
 
     info "Installing packages: ${pkgs[*]}"
