@@ -57,14 +57,21 @@ main() {
     /usr/local/bin/mediamtx &
     sleep 2
 
-    # Check if we have libcamera-vid
-    if command -v libcamera-vid &>/dev/null; then
-        log "Streaming via libcamera-vid..."
+    # Check for libcamera or rpicam (renamed in modern Pi OS)
+    local cam_app=""
+    if command -v rpicam-vid &>/dev/null; then
+        cam_app="rpicam-vid"
+    elif command -v libcamera-vid &>/dev/null; then
+        cam_app="libcamera-vid"
+    fi
+
+    if [[ -n "$cam_app" ]]; then
+        log "Streaming via $cam_app..."
         
-        # We pipe libcamera-vid output (H264 bitstream) to ffmpeg to package it as RTSP
+        # We pipe output (H264 bitstream) to ffmpeg to package it as RTSP
         # RTSP stream will be available at rtsp://<ip>:8554/cam
         # WebRTC stream will be available at http://<ip>:8889/cam
-        libcamera-vid -t 0 --inline --framerate 30 \
+        "$cam_app" -t 0 --inline --framerate 30 \
             --codec h264 --profile high --level 4.2 \
             -o - | ffmpeg -hide_banner -loglevel error \
             -i - -c:v copy -f rtsp rtsp://localhost:8554/cam &
