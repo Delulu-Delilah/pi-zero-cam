@@ -263,12 +263,18 @@ info "Boot config directory: ${BOLD}${BOOT_DIR}${RESET}"
 
 patch_config() {
     # ── config.txt ──
-    # Enable dwc2 overlay for USB gadget mode
-    if ! grep -q "^dtoverlay=dwc2" "$CONFIG_TXT" 2>/dev/null; then
-        echo "dtoverlay=dwc2" >> "$CONFIG_TXT"
-        ok "Added dtoverlay=dwc2 to config.txt"
+    # Enable dwc2 overlay for USB gadget mode (peripheral mode required)
+    if grep -q "^dtoverlay=dwc2" "$CONFIG_TXT" 2>/dev/null; then
+        # Replace any existing dwc2 overlay (e.g. dr_mode=host) with peripheral mode
+        if grep -q "^dtoverlay=dwc2,dr_mode=peripheral" "$CONFIG_TXT" 2>/dev/null; then
+            ok "dtoverlay=dwc2,dr_mode=peripheral already present"
+        else
+            sed -i 's/^dtoverlay=dwc2.*/dtoverlay=dwc2,dr_mode=peripheral/' "$CONFIG_TXT"
+            ok "Updated dtoverlay=dwc2 to dr_mode=peripheral"
+        fi
     else
-        ok "dtoverlay=dwc2 already present"
+        echo "dtoverlay=dwc2,dr_mode=peripheral" >> "$CONFIG_TXT"
+        ok "Added dtoverlay=dwc2,dr_mode=peripheral to config.txt"
     fi
 
     # Enable automatic camera detection
