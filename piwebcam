@@ -55,7 +55,7 @@ main() {
 
     log "Configuring MediaMTX for native Raspberry Pi Camera..."
     
-    cat <<EOF > /tmp/mediamtx.yml
+    cat <<EOF > /run/piwebcam.yml
 paths:
   cam:
     source: rpiCamera
@@ -67,7 +67,7 @@ EOF
     log "Streaming active! Watch at http://<pi-ip>:8889/cam"
     
     # Run MediaMTX in the foreground with our config
-    exec /usr/local/bin/mediamtx /tmp/mediamtx.yml
+    exec /usr/local/bin/mediamtx /run/piwebcam.yml
 }
 
 main "$@"
