@@ -263,15 +263,6 @@ info "Boot config directory: ${BOLD}${BOOT_DIR}${RESET}"
 
 patch_config() {
     # ── config.txt ──
-    # Enable dwc2 overlay for USB gadget mode (peripheral mode required)
-    # Remove any existing dwc2 overlay lines (they might be under [cm5] or have host mode)
-    sed -i '/^dtoverlay=dwc2/d' "$CONFIG_TXT"
-    # Append to the end of the file under an explicit [all] block
-    echo "" >> "$CONFIG_TXT"
-    echo "[all]" >> "$CONFIG_TXT"
-    echo "dtoverlay=dwc2,dr_mode=peripheral" >> "$CONFIG_TXT"
-    ok "Added dtoverlay=dwc2,dr_mode=peripheral to config.txt"
-
     # Enable automatic camera detection
     if ! grep -q "^camera_auto_detect=1" "$CONFIG_TXT" 2>/dev/null; then
         # Remove any existing camera_auto_detect line
@@ -298,54 +289,40 @@ patch_config() {
     else
         ok "gpu_mem already configured"
     fi
-
-    # ── cmdline.txt ──
-    if ! grep -q "modules-load=dwc2,libcomposite" "$CMDLINE_TXT" 2>/dev/null; then
-        # Append to the single line (cmdline.txt is one line)
-        sed -i 's/$/ modules-load=dwc2,libcomposite/' "$CMDLINE_TXT"
-        ok "Added modules-load=dwc2,libcomposite to cmdline.txt"
-    else
-        ok "modules-load already present in cmdline.txt"
-    fi
-
-    # Load modules now (if not already loaded)
-    modprobe dwc2 2>/dev/null || true
-    modprobe libcomposite 2>/dev/null || true
 }
 
 run_or_dry patch_config
 
-# ── Build uvc-gadget ────────────────────────────────────────────────────────
-step "${ICON_GEAR} Building uvc-gadget"
+# ── Install MediaMTX (RTSP/WebRTC Server) ──────────────────────────────────
+step "${ICON_GEAR} Installing MediaMTX"
 
-UVC_SRC="/opt/uvc-gadget"
+MMTX_VER="1.11.3"
+MMTX_URL="https://github.com/bluenviron/mediamtx/releases/download/v${MMTX_VER}/mediamtx_v${MMTX_VER}_linux_arm64v8.tar.gz"
 
-build_uvc_gadget() {
-    if [[ -f /usr/local/bin/uvc-gadget ]]; then
-        ok "uvc-gadget binary already exists — skipping build"
+install_mediamtx() {
+    if command -v mediamtx &>/dev/null; then
+        ok "MediaMTX binary already exists — skipping download"
         return 0
     fi
 
-    if [[ -d "$UVC_SRC" ]]; then
-        info "Source directory exists. Pulling latest..."
-        cd "$UVC_SRC" && git pull --quiet
-    else
-        info "Cloning uvc-gadget..."
-        git clone --quiet https://github.com/climberhunt/uvc-gadget.git "$UVC_SRC"
-    fi
-
-    cd "$UVC_SRC"
-    info "Compiling..."
-    make clean &>/dev/null 2>&1 || true
-    make -j"$(nproc)" &>/dev/null &
-    spin $! "Compiling uvc-gadget..."
-
-    cp uvc-gadget /usr/local/bin/uvc-gadget
-    chmod +x /usr/local/bin/uvc-gadget
-    ok "uvc-gadget installed to /usr/local/bin/"
+    info "Downloading MediaMTX v${MMTX_VER}..."
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    
+    # Download and extract the binary
+    curl -sSL "$MMTX_URL" -o "$tmpdir/mediamtx.tar.gz"
+    tar -xzf "$tmpdir/mediamtx.tar.gz" -C "$tmpdir"
+    
+    # Install binary
+    cp "$tmpdir/mediamtx" /usr/local/bin/mediamtx
+    chmod +x /usr/local/bin/mediamtx
+    
+    # Clean up
+    rm -rf "$tmpdir"
+    ok "MediaMTX installed to /usr/local/bin/"
 }
 
-run_or_dry build_uvc_gadget
+run_or_dry install_mediamtx
 
 # ── Install piwebcam launcher ──────────────────────────────────────────────
 step "${ICON_PLUG} Installing piwebcam launcher"
@@ -400,15 +377,17 @@ bullet "Camera   : ${CAMERA_INFO:-not detected yet}"
 echo ""
 
 info "${BOLD}What was installed:${RESET}"
-bullet "/usr/local/bin/uvc-gadget   — UVC gadget binary"
+bullet "/usr/local/bin/mediamtx     — RTSP/WebRTC Server"
 bullet "/usr/local/bin/piwebcam     — Launcher script"
 bullet "/etc/systemd/system/piwebcam.service"
 echo ""
 
 info "${BOLD}Next steps:${RESET}"
-echo -e "     ${YELLOW}1.${RESET} Reboot the Pi:  ${BOLD}sudo reboot${RESET}"
-echo -e "     ${YELLOW}2.${RESET} Connect the ${BOLD}data${RESET} micro-USB port to your computer"
-echo -e "     ${YELLOW}3.${RESET} Open any camera app — your Pi is now a webcam! ${ICON_CAM}"
+echo -e "     ${YELLOW}1.${RESET} Wait 10 seconds for the camera to start streaming"
+echo -e "     ${YELLOW}2.${RESET} Plug the Pi's IP address into a browser for WebRTC:"
+echo -e "        ${BOLD}http://<pi-ip>:8889/cam${RESET}"
+echo -e "     ${YELLOW}3.${RESET} Or open in VLC Network Stream:"
+echo -e "        ${BOLD}rtsp://<pi-ip>:8554/cam${RESET} ${ICON_CAM}"
 echo ""
 echo -e "  ${DIM}To uninstall:  sudo ./uninstall.sh${RESET}"
 echo -e "  ${DIM}Service log:   journalctl -u piwebcam -f${RESET}"

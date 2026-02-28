@@ -1,5 +1,5 @@
 [Unit]
-Description=Pi Zero Cam — USB Webcam Service
+Description=Pi Zero Cam — IP Camera Service
 Documentation=https://github.com/Delulu-Delilah/pi-zero-cam
 After=network.target systemd-modules-load.service
 Wants=systemd-modules-load.service

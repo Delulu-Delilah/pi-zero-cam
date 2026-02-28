@@ -1,41 +1,32 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  piwebcam — UVC Gadget Launcher for Pi Zero Cam
+#  piwebcam — IP Camera Launcher for Pi Zero Cam
 #
-#  Configures USB gadget via configfs and launches uvc-gadget.
+#  Starts MediaMTX and streams video from the camera via RTSP/WebRTC.
 #  Called automatically by piwebcam.service on boot.
 # ============================================================================
 set -euo pipefail
-
-GADGET_DIR="/sys/kernel/config/usb_gadget/piwebcam"
-UVC_GADGET="/usr/local/bin/uvc-gadget"
-
-# USB descriptor values
-VID="0x1d6b"          # Linux Foundation
-PID="0x0104"          # Multifunction Composite Gadget
-SERIAL="fedcba9876543210"
-MANUFACTURER="Pi Zero Cam"
-PRODUCT="USB Webcam"
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 log()  { echo "[piwebcam] $*" | logger -t piwebcam; echo "[piwebcam] $*"; }
 die()  { log "FATAL: $*"; exit 1; }
 
+cleanup() {
+    log "Shutting down..."
+    kill $(jobs -p) 2>/dev/null || true
+    log "Processes stopped"
+}
+trap cleanup EXIT SIGTERM SIGINT
+
 # ── Find the best video device ─────────────────────────────────────────────
 find_camera_device() {
     local best_dev=""
-
-    # Prefer CSI camera (usually /dev/video0 on Pi)
     for dev in /dev/video*; do
         [[ -e "$dev" ]] || continue
-        # Check if it's a capture device (not a metadata or output device)
         if v4l2-ctl --device="$dev" --all 2>/dev/null | grep -q "Video Capture"; then
-            # Check capabilities — prefer devices with MPLANE or single-plane capture
             local caps
             caps=$(v4l2-ctl --device="$dev" --all 2>/dev/null | grep "Driver name" | head -1 || true)
-
             if echo "$caps" | grep -qi "unicam\|bcm2835\|mmal"; then
-                # This is the Pi CSI camera — prefer it
                 best_dev="$dev"
                 log "Found CSI camera on $dev" >&2
                 break
@@ -45,228 +36,53 @@ find_camera_device() {
             fi
         fi
     done
-
     echo "$best_dev"
-}
-
-# ── Detect best resolution ─────────────────────────────────────────────────
-detect_resolution() {
-    local dev="$1"
-    local width=640 height=480
-
-    # Try to get available formats and pick a reasonable resolution
-    local formats
-    formats=$(v4l2-ctl --device="$dev" --list-formats-ext 2>/dev/null || true)
-
-    if echo "$formats" | grep -q "1920x1080"; then
-        width=1920; height=1080
-    elif echo "$formats" | grep -q "1280x720"; then
-        width=1280; height=720
-    elif echo "$formats" | grep -q "640x480"; then
-        width=640; height=480
-    fi
-
-    echo "${width}x${height}"
-}
-
-# ── Cleanup handler ─────────────────────────────────────────────────────────
-# ── Tear down gadget (used by cleanup trap and setup_gadget) ────────────────
-teardown_gadget() {
-    if [[ ! -d "$GADGET_DIR" ]]; then
-        return 0
-    fi
-
-    # 1. Unbind from UDC
-    echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
-
-    # 2. Remove function symlink from config
-    rm -f "$GADGET_DIR/configs/c.1/uvc.usb0" 2>/dev/null || true
-
-    # 3. Remove config strings and config
-    rmdir "$GADGET_DIR/configs/c.1/strings/0x409" 2>/dev/null || true
-    rmdir "$GADGET_DIR/configs/c.1" 2>/dev/null || true
-
-    # 4. Remove streaming symlinks inside header/h
-    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/header/h/m" 2>/dev/null || true
-    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/header/h/u" 2>/dev/null || true
-
-    # 5. Remove streaming class symlinks
-    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs/h" 2>/dev/null || true
-    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs/h" 2>/dev/null || true
-    rm -f "$GADGET_DIR/functions/uvc.usb0/streaming/class/ss/h" 2>/dev/null || true
-
-    # 6. Remove streaming directories (deepest first)
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m/2" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m/1" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/mjpeg/m" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/uncompressed/u/1" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/uncompressed/u" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/header/h" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/fs" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/hs" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/streaming/class/ss" 2>/dev/null || true
-
-    # 7. Remove control symlinks and directories
-    rm -f "$GADGET_DIR/functions/uvc.usb0/control/class/fs/h" 2>/dev/null || true
-    rm -f "$GADGET_DIR/functions/uvc.usb0/control/class/ss/h" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/control/header/h" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/fs" 2>/dev/null || true
-    rmdir "$GADGET_DIR/functions/uvc.usb0/control/class/ss" 2>/dev/null || true
-
-    # 8. Remove function, strings, gadget
-    rmdir "$GADGET_DIR/functions/uvc.usb0" 2>/dev/null || true
-    rmdir "$GADGET_DIR/strings/0x409" 2>/dev/null || true
-    rmdir "$GADGET_DIR" 2>/dev/null || true
-}
-
-cleanup() {
-    log "Shutting down..."
-    teardown_gadget
-    log "Gadget cleaned up"
-}
-
-trap cleanup EXIT SIGTERM SIGINT
-
-# ── Configure USB gadget via configfs ───────────────────────────────────────
-setup_gadget() {
-    log "Configuring USB gadget..."
-
-    # Clean up any stale gadget config from a previous crash/restart
-    teardown_gadget
-
-    # Mount configfs if not already mounted
-    if ! mountpoint -q /sys/kernel/config; then
-        mount -t configfs none /sys/kernel/config
-    fi
-
-    # Create gadget
-    mkdir -p "$GADGET_DIR"
-    echo "$VID" > "$GADGET_DIR/idVendor"
-    echo "$PID" > "$GADGET_DIR/idProduct"
-    echo "0x0200" > "$GADGET_DIR/bcdUSB"
-    echo "0xEF" > "$GADGET_DIR/bDeviceClass"
-    echo "0x02" > "$GADGET_DIR/bDeviceSubClass"
-    echo "0x01" > "$GADGET_DIR/bDeviceProtocol"
-
-    # Strings
-    mkdir -p "$GADGET_DIR/strings/0x409"
-    echo "$SERIAL"       > "$GADGET_DIR/strings/0x409/serialnumber"
-    echo "$MANUFACTURER" > "$GADGET_DIR/strings/0x409/manufacturer"
-    echo "$PRODUCT"      > "$GADGET_DIR/strings/0x409/product"
-
-    # UVC function
-    mkdir -p "$GADGET_DIR/functions/uvc.usb0"
-
-    # Configure available streaming formats
-    # ── MJPEG ──
-    local streaming_dir="$GADGET_DIR/functions/uvc.usb0/streaming"
-    mkdir -p "$streaming_dir/mjpeg/m/1"
-    echo 640   > "$streaming_dir/mjpeg/m/1/wWidth"
-    echo 480   > "$streaming_dir/mjpeg/m/1/wHeight"
-    echo 333333 > "$streaming_dir/mjpeg/m/1/dwFrameInterval"
-    echo 614400 > "$streaming_dir/mjpeg/m/1/dwMaxVideoFrameBufferSize"
-    echo 10000000 > "$streaming_dir/mjpeg/m/1/dwMaxBitRate"
-    echo 10000000 > "$streaming_dir/mjpeg/m/1/dwMinBitRate"
-
-    # Add 720p if supported
-    mkdir -p "$streaming_dir/mjpeg/m/2"
-    echo 1280  > "$streaming_dir/mjpeg/m/2/wWidth"
-    echo 720   > "$streaming_dir/mjpeg/m/2/wHeight"
-    echo 333333 > "$streaming_dir/mjpeg/m/2/dwFrameInterval"
-    echo 1843200 > "$streaming_dir/mjpeg/m/2/dwMaxVideoFrameBufferSize"
-    echo 29491200 > "$streaming_dir/mjpeg/m/2/dwMaxBitRate"
-    echo 29491200 > "$streaming_dir/mjpeg/m/2/dwMinBitRate"
-
-    # ── Uncompressed (YUYV) ──
-    mkdir -p "$streaming_dir/uncompressed/u/1"
-    echo 640   > "$streaming_dir/uncompressed/u/1/wWidth"
-    echo 480   > "$streaming_dir/uncompressed/u/1/wHeight"
-    echo 333333 > "$streaming_dir/uncompressed/u/1/dwFrameInterval"
-    echo 614400 > "$streaming_dir/uncompressed/u/1/dwMaxVideoFrameBufferSize"
-    echo 10000000 > "$streaming_dir/uncompressed/u/1/dwMaxBitRate"
-    echo 10000000 > "$streaming_dir/uncompressed/u/1/dwMinBitRate"
-
-    # Streaming header
-    mkdir -p "$streaming_dir/header/h"
-    ln -sf "$streaming_dir/mjpeg/m"        "$streaming_dir/header/h/m" 2>/dev/null || true
-    ln -sf "$streaming_dir/uncompressed/u" "$streaming_dir/header/h/u" 2>/dev/null || true
-    ln -sf "$streaming_dir/header/h"       "$streaming_dir/class/fs/h" 2>/dev/null || true
-    ln -sf "$streaming_dir/header/h"       "$streaming_dir/class/hs/h" 2>/dev/null || true
-    ln -sf "$streaming_dir/header/h"       "$streaming_dir/class/ss/h" 2>/dev/null || true
-
-    # Control header
-    local control_dir="$GADGET_DIR/functions/uvc.usb0/control"
-    mkdir -p "$control_dir/header/h"
-    ln -sf "$control_dir/header/h" "$control_dir/class/fs/h" 2>/dev/null || true
-    ln -sf "$control_dir/header/h" "$control_dir/class/ss/h" 2>/dev/null || true
-
-    # Configuration
-    mkdir -p "$GADGET_DIR/configs/c.1/strings/0x409"
-    echo "UVC Webcam" > "$GADGET_DIR/configs/c.1/strings/0x409/configuration"
-    echo 500 > "$GADGET_DIR/configs/c.1/MaxPower"
-
-    # Link function to config
-    ln -sf "$GADGET_DIR/functions/uvc.usb0" "$GADGET_DIR/configs/c.1/uvc.usb0" 2>/dev/null || true
-
-    # Find UDC (USB Device Controller) and bind
-    local udc
-    udc=$(find /sys/class/udc/ -maxdepth 1 -mindepth 1 -printf '%f\n' 2>/dev/null | head -1)
-    if [[ -z "$udc" ]]; then
-        die "No USB Device Controller found. Is dwc2 loaded?"
-    fi
-
-    echo "$udc" > "$GADGET_DIR/UDC"
-    log "Gadget bound to UDC: $udc"
 }
 
 # ── Main ────────────────────────────────────────────────────────────────────
 main() {
-    log "Starting Pi Zero Cam..."
+    log "Starting Pi Zero IP Camera..."
 
-    # Wait a moment for video devices to appear
+    # Wait a moment for video devices to initialize
     sleep 2
 
-    # Find camera
     local cam_dev
     cam_dev=$(find_camera_device)
     if [[ -z "$cam_dev" ]]; then
         die "No camera device found. Check your camera connection."
     fi
+    log "Using camera: $cam_dev"
 
-    local resolution
-    resolution=$(detect_resolution "$cam_dev")
-    local width=${resolution%%x*}
-    local height=${resolution##*x}
+    log "Starting MediaMTX RTSP/WebRTC Server..."
+    /usr/local/bin/mediamtx &
+    sleep 2
 
-    log "Using camera: $cam_dev at ${width}x${height}"
-
-    # Setup USB gadget
-    setup_gadget
-
-    # Find the UVC device that was created
-    sleep 1
-    local uvc_dev=""
-    for dev in /dev/video*; do
-        [[ -e "$dev" ]] || continue
-        if v4l2-ctl --device="$dev" --all 2>/dev/null | grep -q "Output"; then
-            uvc_dev="$dev"
-            break
-        fi
-    done
-
-    if [[ -z "$uvc_dev" ]]; then
-        # Fallback — the UVC device is usually the last video device
-        uvc_dev=$(find /dev -maxdepth 1 -name 'video*' 2>/dev/null | sort | tail -1)
+    # Check if we have libcamera-vid
+    if command -v libcamera-vid &>/dev/null; then
+        log "Streaming via libcamera-vid..."
+        
+        # We pipe libcamera-vid output (H264 bitstream) to ffmpeg to package it as RTSP
+        # RTSP stream will be available at rtsp://<ip>:8554/cam
+        # WebRTC stream will be available at http://<ip>:8889/cam
+        libcamera-vid -t 0 --inline --framerate 30 \
+            --codec h264 --profile high --level 4.2 \
+            -o - | ffmpeg -hide_banner -loglevel error \
+            -i - -c:v copy -f rtsp rtsp://localhost:8554/cam &
+            
+    elif command -v ffmpeg &>/dev/null; then
+        log "Streaming via ffmpeg (V4L2)..."
+        ffmpeg -hide_banner -loglevel error \
+            -f v4l2 -framerate 30 -video_size 1280x720 -i "$cam_dev" \
+            -c:v libx264 -preset ultrafast -tune zerolatency \
+            -f rtsp rtsp://localhost:8554/cam &
+    else
+        die "Neither libcamera-vid nor ffmpeg is installed."
     fi
 
-    log "UVC output device: $uvc_dev"
-    log "Camera source: $cam_dev"
-
-    # Launch uvc-gadget
-    # The exact arguments depend on the uvc-gadget fork
-    log "Launching uvc-gadget..."
-    exec "$UVC_GADGET" -u "$uvc_dev" -v "$cam_dev" -f 0 -r 1 \
-        -W "$width" -H "$height"
+    log "Streaming active! Watch at http://<pi-ip>:8889/cam"
+    
+    # Keep the script running to keep background jobs alive
+    wait
 }
 
 main "$@"

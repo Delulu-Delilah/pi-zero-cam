@@ -25,7 +25,7 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-echo -e "  This will remove Pi Zero Cam and restore your boot configuration."
+echo -e "  This will remove the Pi Zero IP Camera service and binaries."
 echo ""
 read -rp "  Are you sure? [y/N] " yn
 [[ "$yn" =~ ^[Yy]$ ]] || { echo "  Aborted."; exit 0; }
@@ -40,46 +40,10 @@ ok "Service stopped and disabled"
 # ── Remove installed files ─────────────────────────────────────────────────
 info "Removing installed files..."
 rm -f /usr/local/bin/piwebcam
-rm -f /usr/local/bin/uvc-gadget
+rm -f /usr/local/bin/mediamtx
 rm -f /etc/systemd/system/piwebcam.service
 systemctl daemon-reload 2>/dev/null || true
 ok "Binaries and service file removed"
-
-# ── Restore boot config ───────────────────────────────────────────────────
-info "Restoring boot configuration..."
-
-if [[ -f /boot/firmware/config.txt ]]; then
-    BOOT_DIR="/boot/firmware"
-else
-    BOOT_DIR="/boot"
-fi
-
-CONFIG_TXT="${BOOT_DIR}/config.txt"
-CMDLINE_TXT="${BOOT_DIR}/cmdline.txt"
-
-# Remove our additions from config.txt
-if [[ -f "$CONFIG_TXT" ]]; then
-    sed -i '/^dtoverlay=dwc2$/d' "$CONFIG_TXT"
-    ok "Removed dtoverlay=dwc2 from config.txt"
-fi
-
-# Remove modules-load from cmdline.txt
-if [[ -f "$CMDLINE_TXT" ]]; then
-    sed -i 's/ modules-load=dwc2,libcomposite//' "$CMDLINE_TXT"
-    ok "Removed modules-load from cmdline.txt"
-fi
-
-# ── Optional: remove uvc-gadget source ─────────────────────────────────────
-if [[ -d /opt/uvc-gadget ]]; then
-    echo ""
-    read -rp "  Remove uvc-gadget source code from /opt/uvc-gadget? [y/N] " yn
-    if [[ "$yn" =~ ^[Yy]$ ]]; then
-        rm -rf /opt/uvc-gadget
-        ok "Source code removed"
-    else
-        info "Source code kept at /opt/uvc-gadget"
-    fi
-fi
 
 # ── Done ────────────────────────────────────────────────────────────────────
 echo ""
@@ -87,5 +51,5 @@ echo -e "  ${GREEN}${BOLD}╔═════════════════
 echo -e "  ${GREEN}${BOLD}║       ✅ Pi Zero Cam uninstalled successfully    ║${RESET}"
 echo -e "  ${GREEN}${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
 echo ""
-info "Reboot to fully restore your system: ${BOLD}sudo reboot${RESET}${DIM}${RESET}"
+info "Uninstallation complete!"
 echo ""

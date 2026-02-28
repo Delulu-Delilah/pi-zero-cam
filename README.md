@@ -1,19 +1,19 @@
 # 📷 Pi Zero Cam
 
-**Turn your Raspberry Pi Zero into a plug-and-play USB webcam in one command.**
+**Turn your Raspberry Pi Zero into a wireless IP camera in one command.**
 
-Pi Zero Cam automatically detects your hardware, configures USB gadget mode, and sets up a camera stream that works as a standard webcam on Windows, macOS, and Linux — no drivers required.
+Pi Zero Cam automatically detects your hardware, sets up a lightweight streaming server (MediaMTX), and broadcasts your camera feed over your Wi-Fi network. View it instantly in your browser (WebRTC) or VLC (RTSP).
 
 ---
 
 ## ✨ Features
 
 - **🔍 Auto-detection** — Detects your Pi model and camera automatically
-- **🔌 Plug-and-play** — Shows up as a standard USB webcam on any OS
-- **🚀 One-command install** — Single script handles everything
-- **🔄 Auto-start** — Webcam starts automatically on every boot
-- **🗑️ Clean uninstall** — Fully reversible, no leftover config
-- **📦 Zero dependencies** — Just needs Raspberry Pi OS
+- **📡 Wireless Streaming** — Streams via high-performance RTSP and WebRTC
+- **🚀 One-command install** — Single script handles downloading and setup
+- **🔄 Auto-start** — Camera starts broadcasting automatically on every boot
+- **🗑️ Clean uninstall** — Fully reversible, leaves no junk behind
+- **📦 Zero hassle** — Uses precompiled binaries to get running in seconds
 
 ## 🛠 Compatibility
 
@@ -29,7 +29,7 @@ Pi Zero Cam automatically detects your hardware, configures USB gadget mode, and
 | Pi Camera Module v2 (IMX219) | ✅ Supported |
 | Pi Camera Module 3 (IMX708) | ✅ Supported |
 | Pi HQ Camera (IMX477) | ✅ Supported |
-| USB Cameras (UVC-compatible) | ✅ Supported |
+| USB Cameras (UVC) | ✅ Supported |
 
 ## ⚡ Quick Start
 
@@ -59,34 +59,32 @@ The installer will:
 1. ✅ Detect your Pi model
 2. ✅ Detect your camera
 3. ✅ Install required packages
-4. ✅ Configure USB gadget mode
-5. ✅ Build and install `uvc-gadget`
-6. ✅ Set up auto-start on boot
+6. ✅ Download and install `mediamtx` streaming server
+7. ✅ Set up auto-start on boot
 
 ### After Install
 
-1. **Reboot** the Pi: `sudo reboot`
-2. **Connect** the Pi's **data** micro-USB port to your computer
-3. **Open** any camera app — your Pi is now a webcam! 📷
-
-> **Important:** Use the **data** micro-USB port (usually labeled "USB"), not the power-only port.
+1. Wait a few seconds for the camera to start streaming
+2. Find your Pi's IP address (e.g., `192.168.1.50`)
+3. **View in Browser (WebRTC):** Open `http://<pi-ip>:8889/cam`
+4. **View in VLC (RTSP):** Open `rtsp://<pi-ip>:8554/cam`
 
 ## 🏗 How It Works
 
 ```
-┌──────────────┐     USB Cable      ┌──────────────────┐
-│   Camera     │───────────────────▶│   Your Computer  │
-│   Module     │  Pi Zero (gadget)  │   (host)         │
-│              │  acts as a USB     │   Sees a webcam  │
-│  CSI / USB   │  webcam device     │   📷             │
-└──────────────┘                    └──────────────────┘
+┌──────────────┐     Wi-Fi Network      ┌──────────────────┐
+│   Camera     │ ) ) ) ) ) ) ) ) ) ) )  │   Your Computer  │
+│   Module     │   Pi Zero streams      │   (host)         │
+│              │   H.264 video via      │   Web Browser    │
+│  CSI / USB   │   RTSP and WebRTC      │   or VLC         │
+└──────────────┘                        └──────────────────┘
 ```
 
-The Pi Zero's USB OTG port supports **gadget mode**, allowing it to present itself as a USB device to the host computer. Pi Zero Cam:
+The Pi Zero connects to your existing Wi-Fi network and broadcasts its camera feed:
 
-1. Configures the Linux USB gadget subsystem (`configfs`) to create a UVC (USB Video Class) device
-2. Captures video from the connected camera via V4L2
-3. Streams the video through the USB gadget to the host computer
+1. `libcamera-vid` (or `ffmpeg`) captures hardware-encoded H.264 video
+2. Video is piped into `mediamtx`, a high-performance streaming server
+3. You connect directly to the Pi over the network to view the ultra-low latency stream
 
 ## 🧪 Dry Run
 
@@ -112,12 +110,12 @@ sudo ./uninstall.sh
 - For CSI cameras, the contacts should face the USB ports on the Pi Zero
 - Try a different camera cable — the Pi Zero uses a narrower cable than full-size Pis
 
-### Computer doesn't see a webcam after reboot
+### Can't access the stream in the browser
 
-- Make sure you're using the **data** USB port, not the power-only port
-- Try a different USB cable — some cables are charge-only (no data)
+- Make sure your computer is on the exact same Wi-Fi network as the Pi
+- Try pinging the Pi: `ping <pi-ip>`
 - Check the service status: `sudo systemctl status piwebcam`
-- View logs: `journalctl -u piwebcam -f`
+- Check the streaming server logs: `journalctl -u piwebcam -n 50 -f`
 
 ### Low frame rate or poor quality
 
@@ -141,10 +139,10 @@ sudo /usr/local/bin/piwebcam
 ## 📁 Project Structure
 
 ```
-pi-zero-cam/
+piwebcam/
 ├── install.sh          # Main installer (auto-detects everything)
 ├── uninstall.sh        # Clean uninstaller
-├── piwebcam            # UVC gadget launcher (installed to /usr/local/bin/)
+├── piwebcam            # IP Camera launcher (installed to /usr/local/bin/)
 ├── piwebcam.service    # systemd service file
 ├── LICENSE             # MIT License
 └── README.md           # This file
@@ -156,6 +154,5 @@ pi-zero-cam/
 
 ## 🙏 Credits
 
-- [uvc-gadget](https://github.com/climberhunt/uvc-gadget) — UVC gadget userspace tool
+- [MediaMTX](https://github.com/bluenviron/mediamtx) — Next-gen RTSP / WebRTC server
 - [Raspberry Pi Foundation](https://www.raspberrypi.org/) — for making awesome tiny computers
-- [showmewebcam](https://github.com/showmewebcam/showmewebcam) — inspiration for this project
