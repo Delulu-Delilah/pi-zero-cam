@@ -49,6 +49,8 @@ spin() {
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && { DRY_RUN=true; warn "DRY-RUN mode — no changes will be made."; }
 
+REPO_RAW="https://raw.githubusercontent.com/Delulu-Delilah/pi-zero-cam/main"
+
 run_or_dry() {
     if $DRY_RUN; then
         bullet "${DIM}(dry-run) $*${RESET}"
@@ -347,16 +349,22 @@ run_or_dry build_uvc_gadget
 # ── Install piwebcam launcher ──────────────────────────────────────────────
 step "${ICON_PLUG} Installing piwebcam launcher"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Detect whether we were run from a local clone or piped from curl
+if [[ -n "${BASH_SOURCE[0]:-}" ]] && [[ -f "${BASH_SOURCE[0]:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+    SCRIPT_DIR=""  # running via curl pipe — will download files
+fi
 
 install_launcher() {
-    if [[ -f "${SCRIPT_DIR}/piwebcam" ]]; then
+    if [[ -n "$SCRIPT_DIR" ]] && [[ -f "${SCRIPT_DIR}/piwebcam" ]]; then
         cp "${SCRIPT_DIR}/piwebcam" /usr/local/bin/piwebcam
-        chmod +x /usr/local/bin/piwebcam
-        ok "piwebcam installed to /usr/local/bin/"
     else
-        die "piwebcam script not found in ${SCRIPT_DIR}. Re-download the project."
+        info "Downloading piwebcam launcher from GitHub..."
+        curl -sSL "$REPO_RAW/piwebcam" -o /usr/local/bin/piwebcam
     fi
+    chmod +x /usr/local/bin/piwebcam
+    ok "piwebcam installed to /usr/local/bin/"
 }
 
 run_or_dry install_launcher
@@ -365,14 +373,15 @@ run_or_dry install_launcher
 step "${ICON_GEAR} Setting up systemd service"
 
 install_service() {
-    if [[ -f "${SCRIPT_DIR}/piwebcam.service" ]]; then
+    if [[ -n "$SCRIPT_DIR" ]] && [[ -f "${SCRIPT_DIR}/piwebcam.service" ]]; then
         cp "${SCRIPT_DIR}/piwebcam.service" /etc/systemd/system/piwebcam.service
-        systemctl daemon-reload
-        systemctl enable piwebcam.service
-        ok "piwebcam.service enabled (starts on boot)"
     else
-        die "piwebcam.service not found in ${SCRIPT_DIR}. Re-download the project."
+        info "Downloading piwebcam.service from GitHub..."
+        curl -sSL "$REPO_RAW/piwebcam.service" -o /etc/systemd/system/piwebcam.service
     fi
+    systemctl daemon-reload
+    systemctl enable piwebcam.service
+    ok "piwebcam.service enabled (starts on boot)"
 }
 
 run_or_dry install_service
